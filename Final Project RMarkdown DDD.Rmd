@@ -1,0 +1,257 @@
+---
+title: "Final Project"
+author: "Michael Wakeman"
+date: "1/9/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+
+Original.Data <- read_csv("NYC_Wi-Fi_Hotspot_Locations.csv")
+Wifi <- Original.Data
+```
+
+## Introduction
+
+Note that a lot of this is kind of jumbled code but I plan on organizing it more for this R markdown
+
+For my final project, I chose to utilize the "NYC Wi-Fi Hotspot Locations" data set from [NYC Open Data](https://data.cityofnewyork.us/City-Government/NYC-Wi-Fi-Hotspot-Locations/yjub-udmw), which was retrieved on Jan. 7, 2021 as a .csv file. The data set includes information on hospot wifi within NYC, including their location, type, and provider information. I chose to call this data set `Wifi`.
+
+I would like to learn about the geographic distribution of hotspot locations in NYC, including by neighborhood and burough. This would also include where internet hotspots are most available and least available. I would also like to know about accessibility to these hotspots, are they mostly free?
+
+## Data Exploration and Initial Cleaning
+
+Here are the initial variables in the `Wifi` data set. I chose to rename `Council Distrcit` to `Council District` since it appeared to be a spelling mistake. 
+
+```{r Variables}
+colnames(Wifi)
+```
+```{r, include = FALSE}
+colnames(Wifi)[21] <- "Council District"
+```
+
+Here I created binary flags for missing data within each variable.
+
+```{r}
+#Binary flags for every variable based on missing data
+Wifi$BF_OBJECTID <- ifelse(is.na(Wifi$OBJECTID) == TRUE, 1, 0)
+Wifi$BF_Provider <- ifelse(is.na(Wifi$Provider) == TRUE, 1, 0)
+Wifi$BF_Latitude <- ifelse(is.na(Wifi$Latitude) == TRUE, 1, 0)
+Wifi$BF_Y <- ifelse(is.na(Wifi$Y) == TRUE, 1, 0)
+Wifi$BF_City <- ifelse(is.na(Wifi$City) == TRUE, 1, 0)
+Wifi$BF_Activated <- ifelse(is.na(Wifi$Activated) == TRUE, 1, 0)
+Wifi$"BF_Neighborhood Tabulation Area Code (NTACODE)" <- 
+  ifelse(is.na(Wifi$"Neighborhood Tabulation Area Code (NTACODE)") == TRUE, 1, 0)
+Wifi$BF_Postcode <- ifelse(is.na(Wifi$Postcode) == TRUE, 1, 0)
+Wifi$BF_BCTCB2010 <- ifelse(is.na(Wifi$BCTCB2010) == TRUE, 1, 0)
+Wifi$BF_DOITT_ID <- ifelse(is.na(Wifi$DOITT_ID) == TRUE, 1, 0)
+Wifi$BF_Borough <- ifelse(is.na(Wifi$Borough) == TRUE, 1, 0)
+Wifi$BF_Name <- ifelse(is.na(Wifi$Name) == TRUE, 1, 0)
+Wifi$BF_Longitude <- ifelse(is.na(Wifi$Longitude) == TRUE, 1, 0)
+Wifi$BF_Location_T <- ifelse(is.na(Wifi$Location_T) == TRUE, 1, 0)
+Wifi$BF_SSID <- ifelse(is.na(Wifi$SSID) == TRUE, 1, 0)
+Wifi$BF_BoroCode <- ifelse(is.na(Wifi$BoroCode) == TRUE, 1, 0)
+Wifi$"BF_Neighborhood Tabulation Area (NTA)" <- 
+  ifelse(is.na(Wifi$"Neighborhood Tabulation Area (NTA)") == TRUE, 1, 0)
+Wifi$BF_BoroCD <- ifelse(is.na(Wifi$BoroCD) == TRUE, 1, 0)
+Wifi$BF_BIN <- ifelse(is.na(Wifi$BIN) == TRUE, 1, 0)
+Wifi$"BF_Location (Lat, Long)" <- ifelse(is.na(Wifi$"Location (Lat, Long)") == TRUE, 1, 0)
+Wifi$BF_Type <- ifelse(is.na(Wifi$Type) == TRUE, 1, 0)
+Wifi$BF_Location <- ifelse(is.na(Wifi$Location) == TRUE, 1, 0)
+Wifi$BF_X <- ifelse(is.na(Wifi$X) == TRUE, 1, 0)
+Wifi$BF_Remarks <- ifelse(is.na(Wifi$Remarks) == TRUE, 1, 0)
+Wifi$BF_SourceID <- ifelse(is.na(Wifi$SourceID) == TRUE, 1, 0)
+Wifi$"BF_Borough Name" <- ifelse(is.na(Wifi$"Borough Name") == TRUE, 1, 0)
+Wifi$"BF_Council District" <- ifelse(is.na(Wifi$"Council District") == TRUE, 1, 0)
+Wifi$"BF_Census Tract" <- ifelse(is.na(Wifi$"Census Tract") == TRUE, 1, 0)
+Wifi$BF_BBL <- ifelse(is.na(Wifi$BBL) == TRUE, 1, 0)
+```
+
+Of the 29 variables, only `Name`, `Remarks`, and `SourceID` contain missing data. These variables all have several hundred missing observations, so it would not be suitable to drop them. I then removed the unnecessary flags. 
+
+```{r echo = FALSE, include = FALSE}
+#Identifying specific variables with missing data
+
+#Not sure if Name where it has 0 is a missing value or if that is literally the name (I think i would use na_if())
+
+sum(Wifi$BF_OBJECTID)
+sum(Wifi$BF_Provider)
+sum(Wifi$BF_Latitude)
+sum(Wifi$BF_Y)
+sum(Wifi$BF_City)
+sum(Wifi$BF_Activated)
+sum(Wifi$"BF_Neighborhood Tabulation Area Code (NTACODE)")
+sum(Wifi$BF_Postcode) 
+sum(Wifi$BF_BCTCB2010)
+sum(Wifi$BF_DOITT_ID)
+sum(Wifi$BF_Borough)
+sum(Wifi$BF_Name)
+sum(Wifi$BF_Longitude)
+sum(Wifi$BF_Location_T) 
+sum(Wifi$BF_SSID)
+sum(Wifi$BF_BoroCode) 
+sum(Wifi$"BF_Neighborhood Tabulation Area (NTA)") 
+sum(Wifi$BF_BoroCD) 
+sum(Wifi$BF_BIN)
+sum(Wifi$"BF_Location (Lat, Long)")
+sum(Wifi$BF_Type) 
+sum(Wifi$BF_Location) 
+sum(Wifi$BF_Remarks)
+sum(Wifi$BF_X) 
+sum(Wifi$BF_SourceID) 
+sum(Wifi$"BF_Borough Name") 
+sum(Wifi$"BF_Council District") 
+sum(Wifi$"BF_Census Tract") 
+sum(Wifi$BF_BBL)
+
+```
+
+```{r echo = FALSE, include = FALSE}
+#Removing binary flags for variables with no missing data
+Wifi <- Wifi %>%
+  select(-BF_OBJECTID, 
+         -BF_Provider,
+         -BF_Latitude,
+         -BF_Y,
+         -BF_City,
+         -BF_Activated,
+         -"BF_Neighborhood Tabulation Area Code (NTACODE)",
+         -BF_Postcode,
+         -BF_BCTCB2010,
+         -BF_DOITT_ID,
+         -BF_Borough,
+         -BF_Longitude,
+         -BF_Location_T,
+         -BF_SSID,
+         -BF_BoroCode,
+         -"BF_Neighborhood Tabulation Area (NTA)",
+         -BF_BoroCD,
+         -BF_BIN,
+         -"BF_Location (Lat, Long)",
+         -BF_Type,
+         -BF_Location,
+         -BF_X,
+         -"BF_Borough Name",
+         -"BF_Council District",
+         -"BF_Census Tract",
+         -BF_BBL
+         )
+
+```
+
+
+```{r}
+#Not sure if I should do this, but I wanted to recode the objectid variable to actually start at 1 (instead of 9601)
+#Switched to a new dataset here since I'm not actually sure if im doing this right/should keep
+
+attempt <- Wifi %>%
+  arrange(OBJECTID) %>%
+  mutate(OBJECTID = (OBJECTID - 9600))
+
+#check to see if borocode and borough are the same variable
+
+bouroughcodeyes <- ifelse(attempt$Borough == attempt$BoroCode, 0, 1)
+sum(bouroughcodeyes)
+
+#So since BoroCode and Borough are the same variable I'm just going to remove BoroCode
+attempt <- attempt %>%
+  select(-BoroCode)
+
+
+#Recoding Borough now as a factor variable
+
+attempt$Borough <- as.factor(attempt$Borough)
+class(attempt$Borough)
+
+#Im not understanding here why if i try to make it a factor it comes back as an integer using typeof but then as a factor for class
+
+#Borough and City have roughly the same information. City has some additional information though. I've chosen to keep both, but I'll be recoding NY to just be Manhattan in the city column to match the other boroughs.
+#These additional cities are all in Queens, so Im not sure if I should just remove borough and allow the cities to stand by themselves.
+
+attempt$City[attempt$City == "New York"] <- "Manhattan"
+
+
+#And now to deal with the activated column (date) using lubridate
+
+attempt$Activated <- mdy(attempt$Activated)
+
+#Also checking if BCT is the same as census tract
+censustractcheck <- ifelse(attempt$`Census Tract` == attempt$BCTCB2010, 0, 1)
+sum(censustractcheck)
+
+attempt <- attempt %>%
+  select(-BCTCB2010)
+
+```
+
+
+
+
+```{r}
+#Making other categorical variables into factors now
+
+attempt$`Borough Name` <- as.factor(attempt$`Borough Name`)
+attempt$City <- as.factor(attempt$City)
+attempt$Type <- as.factor(attempt$Type)
+
+
+
+```
+
+
+
+
+```{r, eval = FALSE}
+#Now Im gonna split up the location into two new variables. It seems to include street number and street address, so basically just what we did with the exercise.
+
+#first im going to make an address variable
+
+attempt$`Mailing Address` <- str_c(attempt$Location,
+                                   attempt$City,
+                                   "New York",
+                                   attempt$Postcode,
+                                   sep = ", ")
+
+#Now I can separate out the street number and street address
+#I have to filter out the ones with actual addresses with numbers (instead of getting "Skate Rental Area' for example)
+address <- str_split(attempt$Location, pattern = " ", n = 2, simplify = TRUE)
+address
+
+#Yeah theres a lot of differences in this variable I'll have to sort through still
+#SO ill have to modify mailing address to be for the ones with numbers in the address
+#It looks like some of these contain whole addresses too with zip and state too so I'll have to remove that as well
+
+
+```
+
+
+```{r pressure, echo=FALSE}
+#Break apart remarks to get the speed/quality
+
+
+```
+
+```{r}
+#Recode the Borough code to be the actual name and double check that both the name and factor are the same, then I might be able to remove Borough and just have city
+
+
+
+```
+
+
+## Making more variables
+
+```{r}
+#Binary variable for free wifi
+attempt$Free <- ifelse(attempt$Type == "Free", 1, 0)
+
+
+
+```
+
+
+
+

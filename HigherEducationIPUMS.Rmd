@@ -1,0 +1,441 @@
+---
+title: 'DDD Final Project: Higher Education IPUMS Data'
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## My Data
+The data used for this project is taken from the following [IPUM's Higher Education Surveys](https://highered.ipums.org/highered/): the National Survey of College Graduates (NSCG), Survey of Doctorate Recipients (SDR), and the National Survey of Recent College Graduates (NSRCG). The variables extracted are related to demographic information, education and family information, and citizen satisfaction. 
+
+I chose this data to dive deeper into how demographics play a role in higher education, as well as how strongly degree level affects satisfaction in later life. The variables I chose in IPUMS enable me to compare data between different demographics to see potential correlations.
+
+This data is from 2013, which is the most recent data collected from the above surveys.
+Formal Citation: Minnesota Population Center. IPUMS Higher Ed: Version 1.0 [dataset]. Minneapolis, MN: University of Minnesota, 2016.
+https://doi.org/10.18128/D100.V1.0
+
+## Downloading Data
+Data was downloaded from IPUMS as a zipped CSV file. Data was downloaded on 1/5/2021.
+```{r downloadingData}
+library (readr)
+originalData <- read_csv("/Users/divyanair/Desktop/DDD-I21/highered_00001.csv.gz")
+```
+``` {r loadingPackages , include=FALSE}
+library(tidyverse)
+library (magrittr)
+library(gt)
+library(tibble)
+```
+## Questions this data can answer
+
+Does level of education impact job satisfaction?
+
+Are there correlations between job satisfaction, salary satisfaction, and satisfaction with how work contributes to society?
+
+Are there racial and gender imbalances in higher education?
+
+### Data Key
+All data from IPUMS automatically came in the form of numeric categorical variables. Though most variables have sensible categories based on the key below, the race/ ethnicity data is lacking in specificity. Since no further breakdown could be found for the race data, the below categories were used for the analysis. The specific questions asked for the satisfaction questions are: 
+
+* Are you satisfied with your job? 
+* Are you satisfied with your salary? 
+* Are you satisfied with your job's contribution to society?\
+
+Responses were given on a scale from 1 to 4, with 1 being most satisfied.\
+Key:
+
+* Gender: 1 = Female, 2 = Male,
+* Race/Ethnicity: 1 = Asian, 2 = White, 3 = Under-represented minority, 4 = other,
+* Citizenship: 0 = yes, 1 = no,
+* Degree: 1 = BA, 2 = MA, 3 = Doctorate, 4 = Professional,
+* All Satisfaction Columns: 1 = very satisfied, 2 = satisfied, 3 = dissatisfied, 4 = very dissatisfied.
+
+## Data Cleaning Steps
+1. Determining number of variables and observations in original data
+``` {r dimension}
+print(dim(originalData))
+```
+There are 115,152 observations and 14 variables in the original dataframe.
+
+2. Rename column names
+```{r renameCols}
+highEdData <- originalData
+
+#reassigns column names
+colnames(highEdData) <- c("personID","year","studyWeight","sampleID","surveyID","age","gender","race","citizenStatus","numberOfChildren","highestDegree","jobSatisfaction","salarySatisfaction","socialSatisfaction")
+
+print (colnames(highEdData))
+```
+3. Determine class and type of each column
+``` {r getClassandType}
+colClass <- lapply (highEdData, class) #gets class for all columns
+colType <- lapply (highEdData,typeof) #gets class for all columns
+
+#binds the class and type into one dataframe
+classAndType <- do.call(rbind, Map(data.frame, classOfData=colClass, typeOfData=colType))
+
+print(classAndType)
+```
+4. Assigning missing data cells to NA. Missing data is denoted with 98, or a logical skip by the participant.
+``` {r createNAs}
+#assigns 98 columns to NA value
+highEdData[highEdData == 98] <- NA
+```
+5. Create binary flags for missing data. 
+```{r evaluatingNA}
+highEdData$naChildren <- ifelse(is.na(highEdData$numberOfChildren) == TRUE,1,0) #gives a 1 for people who didn't respond/have no children
+highEdData$naJobSat <- ifelse(is.na(highEdData$jobSatisfaction) == TRUE,1,0) #gives a 1 for people who didn't respond
+highEdData$naCitizenship <- ifelse(is.na(highEdData$citizenStatus) == TRUE,1,0) #gives a 1 for people who didn't respond/ may be undocumented
+highEdData$naSalarySat <- ifelse(is.na(highEdData$salarySatisfaction) == TRUE,1,0) #gives a 1 for people who didn't respond
+highEdData$naSocialSat <- ifelse(is.na(highEdData$socialSatisfaction) == TRUE,1,0) #gives a 1 for people who didn't respond
+```
+6. Removing observations with no response for certain variables.
+``` {r creatingCleanedData}
+#Removes all rows with 1 (or no response) for each of the following columns
+cleanedData <- highEdData[!(highEdData$naChildren == 1 | 
+                              highEdData$naJobSat == 1 | 
+                              highEdData$naCitizenship == 1 | 
+                              highEdData$naSalarySat == 1 | 
+                              highEdData$naSocialSat == 1),]
+
+#Determining how many observations were dropped
+print(length(rownames(originalData))-length(rownames(cleanedData)))
+```
+71,823 rows were dropped. Since this is a significant amount, the fully cleaned dataset will be used as sparingly as possible. Instead, dataframes of relevant extracted variables will be cleaned separately to include as much data as possible to draw more accurate conclusions.
+
+## Using data to determine relationships between variables
+Since the necessary variables for the following two questions (gender, highest level of education, and race) had no missing values for observations, the non-cleaned data was used to incorporate as much data as possible.
+
+### How does gender impact higher education?
+
+Data Used: gender and highestDegree columns with all observations from original data.
+
+``` {r genderAndDegreeAnalysis, message = FALSE}
+#extracting gender and highest degree data from overall dataframe
+
+genderAndDegree <- highEdData %>% 
+  dplyr::select(gender , highestDegree) %>% 
+  dplyr::arrange(gender)
+
+femaleDegree <- genderAndDegree[genderAndDegree$gender == 1, ] #subsects gender data for only females
+avgFemDegree <- mean(femaleDegree$highestDegree) 
+
+maleDegree <- genderAndDegree[genderAndDegree$gender == 2, ] #subsects gender data for only males
+avgMaleDegree <- mean(maleDegree$highestDegree) 
+
+#creating new dataframes with degree breakdown by gender
+femDegreeBreakdown <- femaleDegree %>% 
+  dplyr::group_by(gender,highestDegree) %>% 
+  dplyr::summarise(breakdown = n()) %>% 
+  dplyr::mutate(percentDegree = (breakdown / sum(breakdown)*100))
+
+maleDegreeBreakdown <- maleDegree %>% 
+  dplyr::group_by(gender,highestDegree) %>% 
+  dplyr::summarise(breakdown = n()) %>% 
+  dplyr::mutate(percentDegree = (breakdown / sum(breakdown)*100))
+```
+
+``` {r GenderandDegreeTable, echo = FALSE, message = FALSE}
+totalGenderDeg <- cbind (femDegreeBreakdown, maleDegreeBreakdown)
+totalGenderDeg <- totalGenderDeg[,c(2:4,7,8)]
+totalGenderDeg[,1] <- c("Bachelors","Masters","Doctorate","Professional")
+totalGenderDeg <- as_tibble(totalGenderDeg)
+colnames(totalGenderDeg) <- c("Degree Name", "Female Number of Degree","Female % Degree","Male Number of Degree","Male % Degree")
+genderAndDegTable <- totalGenderDeg %>% 
+  gt() %>%
+    tab_header(title = "Figure 1.1: Degree Breakdown by Gender",subtitle = "Source: IPUMS 2013 Higher Education Surveys") %>%
+  tab_spanner(
+    label = "Female",
+    columns = vars("Female Number of Degree","Female % Degree")
+  ) %>%
+  tab_spanner(
+    label = "Male",
+    columns = vars("Male Number of Degree","Male % Degree")
+  ) %>%
+  cols_label(
+    `Female Number of Degree` = "# Degree",
+    `Female % Degree` = "% Degree",
+    `Male Number of Degree` = "# Degree",
+    `Male % Degree` = "% Degree"
+  )
+genderAndDegTable
+```
+
+
+The table above shows that on average, males have obtained a higher degree level than females. Males and females have similar percentage of professional degrees, males have a significantly higher percentage of doctorate Degrees, females have significantly higher percentage of masters, and both sexes have a relatively similar percentage of BAs. On average, females have a degree of 1.942707. Rounded to 2, females have a masters degree as their highest degree on average. Males have an overall average degree of 2.007282, which is higher than that of females. Still rounded to 2, males have a masters degree as highest degree on average.
+
+### How does race impact higher education?
+
+Data used: race and highestDegree columns with all observations from original data.
+
+``` {r raceAndDegreeAnalysis , message = FALSE}
+#Race and Highest Degree
+raceAndDegree <- highEdData %>% 
+  dplyr::select(race , highestDegree) %>% 
+  dplyr::arrange(race)
+
+#Creates new dataframe with only data for Asians
+asianDegree <- raceAndDegree[raceAndDegree$race == 1, ]
+avgAsianDegree <- mean(asianDegree$highestDegree) 
+
+#Creates new dataframe with only data for White respondents
+whiteDegree <- raceAndDegree[raceAndDegree$race == 2, ]
+avgWhiteDegree <- mean(whiteDegree$highestDegree) 
+
+#Creates new dataframe with only data for respondents who are an underrepresented minority
+underRepMinDegree <- raceAndDegree[raceAndDegree$race == 3, ]
+avgUnderRepMinDegree <- mean(underRepMinDegree$highestDegree) 
+
+#Creating dataframes with summaries of how many/ percentage of individuals obtained which degree by race:
+asianBreakdown <- asianDegree %>% 
+  dplyr::group_by(race,highestDegree) %>% 
+  dplyr::summarise(breakdown = n()) %>% 
+  dplyr::mutate(percentDegree = (breakdown / sum(breakdown)*100))
+
+whiteBreakdown <- whiteDegree %>% 
+  dplyr::group_by(race,highestDegree) %>% 
+  dplyr::summarise(breakdown = n()) %>% 
+  dplyr::mutate(percentDegree = (breakdown / sum(breakdown)*100))
+
+underRepMinBreakdown <- underRepMinDegree %>% 
+  dplyr::group_by(race,highestDegree) %>% 
+  dplyr::summarise(breakdown = n()) %>% 
+  dplyr::mutate(percentDegree = (breakdown / sum(breakdown)*100))
+```
+
+On average, Asian respondents have a degree of 2.069207. White respondents have a degree of 1.991291 on average, and respondents of an underrepresented minority have an average highest degree of 1.86711. While Asians have the highest degree on average, all races' average degree is rounded to 2, or a masters degree. 
+
+```{r raceAndDegTable, echo=FALSE, message=FALSE}
+
+#Preparing data for graphing
+asianBreakdown[,1] <- "Asian"
+asianBreakdown[,2] <- c("Bachelor's", "Masters","Doctorate","Professional")
+asianBreakdown <- asianBreakdown[,c(1,2,4)]
+
+whiteBreakdown[,1] <- "White"
+whiteBreakdown[,2] <- c("Bachelor's", "Masters","Doctorate","Professional")
+whiteBreakdown <- whiteBreakdown[,c(1,2,4)]
+
+underRepMinBreakdown[,1] <- "Underrepresented Minority"
+underRepMinBreakdown[,2] <- c("Bachelor's", "Masters","Doctorate","Professional")
+underRepMinBreakdown <- underRepMinBreakdown[,c(1,2,4)]
+
+fullRaceDeg <- rbind(asianBreakdown, whiteBreakdown, underRepMinBreakdown)
+fullRaceDegGrouped <- fullRaceDeg %>%
+  group_by(highestDegree)
+
+#Creating graph for race and degree data
+RaceDegPlot <- ggplot(data = fullRaceDegGrouped,
+                      aes(x = highestDegree, y = percentDegree, fill = race)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  theme_minimal() +
+  labs(title = "Figure 1.2: Breakdown of Degree by Race", subtitle = "Source: IPUMS 2013 Higher Education Surveys") +
+  ylab("% of Respondents With Degree") +
+  xlab("Highest Degree Obtained") +
+  scale_fill_manual(values = c('thistle','lightskyblue1','darkseagreen2'))
+
+RaceDegPlot
+
+```
+
+When looking at the graphs above, the breakdown by race for highest degree varies. For Asian respondents, the most common highest degree was a doctorate. For white respondents and those of an underrepresented minority, this was a bachelor's degree. All three groups had comparable percentages of those with professional degrees. Looking at each degree separately, those of an underrepresented minority have the highest percentage of respondents who had a bachelor's degree as their highest degree. Asian respondents had the highest percentage of doctorates. White respondents and those of an underrepresented minority both had the highest percent of those with a master's degree, and underrepresented minorities had the highest level of professional degrees. 
+
+### How does highest degree impact satisfaction?
+
+Data used: highestDegree, jobSatisfaction, salarySatisfaction, and socialSatisfaction columns for observations that had answers to all three satisfaction questions. 17,101 observations were dropped.
+
+``` {r degreeAndSocialSatisfaction}
+# Cleans the full dataframe with all observations to only include highestDegree, jobSatisfaction, salarySatisfaction, and socialSatisfaction columns. Removes observations with at least one NA to the three questions.
+
+degAndSat <- highEdData %>%
+  dplyr::select(
+    highestDegree, jobSatisfaction, salarySatisfaction, socialSatisfaction, naJobSat, naSalarySat, naSocialSat) %>%
+  dplyr::arrange(highestDegree)
+
+degAndSatCleaned <- degAndSat[!(degAndSat$naJobSat == 1 | 
+                              degAndSat$naSalarySat == 1 | 
+                              degAndSat$naSocialSat == 1),] 
+
+#gets the averages of all satisfaction responses 
+degAndSatCleaned$avgSat <- ((degAndSatCleaned$jobSatisfaction + degAndSatCleaned$salarySatisfaction + degAndSatCleaned$socialSatisfaction)/3)
+
+#Creates a dataframe with all satisfaction data for those with bachelor's degrees.
+BASat <- degAndSatCleaned[degAndSatCleaned$highestDegree == 1, ]
+#Calculates average satisfaction amongst those with BAs.
+BAAvgSat <- mean(BASat$avgSat) 
+
+#Creates a dataframe with all satisfaction data for those with master's degrees.
+MaSat <- degAndSatCleaned[degAndSatCleaned$highestDegree == 2, ]
+#Calculates average satisfaction amongst those with MAs.
+MaAvgSat <- mean(MaSat$avgSat) 
+
+#Creates a dataframe with all satisfaction data for those with doctorate degrees.
+DocSat <- degAndSatCleaned[degAndSatCleaned$highestDegree == 3, ]
+#Calculates average satisfaction amongst those with doctorate degrees.
+DocAvgSat <- mean(DocSat$avgSat) 
+
+#Creates a dataframe with all satisfaction data for those with professional degrees.
+ProfSat <- degAndSatCleaned[degAndSatCleaned$highestDegree == 4, ]
+#Calculates average satisfaction amongst those with professional degrees.
+ProfAvgSat <- mean(ProfSat$avgSat) 
+
+```
+
+
+When looking at the average satisfaction scores across education level, respondents with bachelor's degrees were the most satisfied, with an average score of 1.84. Those with masters had an average score of 1.77, and those with doctorate degrees had an average score of 1.72. Respondents with professional degrees had the lowest average satisfaction score of 1.63. Though the average scores varied numerically, all the scores rounded to 2 or "Satisfied."
+
+
+``` {r degreeAndSatisfactionTable, echo = FALSE, message = FALSE }
+#Creating degree and satisfaction table
+BASum1 <- BASat %>%
+  dplyr::group_by(jobSatisfaction) %>%
+  dplyr::summarise(summJob = n()) %>%
+  dplyr::mutate(jobPercentDegree = (summJob / sum(summJob)*100))
+BaSum2 <- BASat %>%
+  dplyr::group_by(salarySatisfaction) %>%
+  dplyr::summarise(summSat = n()) %>%
+  dplyr::mutate(salPercentDegree = (summSat / sum(summSat)*100))
+BaSum3 <- BASat %>%
+  dplyr::group_by(socialSatisfaction) %>%
+  dplyr::summarise(summSoc = n()) %>%
+  dplyr::mutate(socPercentDegree = (summSoc / sum(summSoc)*100))
+
+BaSumTot <- cbind(BASum1, BaSum2, BaSum3) %>%
+  dplyr::select(jobSatisfaction, summJob, jobPercentDegree, summSat, salPercentDegree, summSoc, socPercentDegree)
+colnames(BaSumTot) <- c("Satisfaction", "BAjob#", "BAjob%","BAsat#","BAsat%","BAsoc#","BAsoc%")  
+
+MaSum1 <- MaSat %>%
+  dplyr::group_by(jobSatisfaction) %>%
+  dplyr::summarise(summJob = n()) %>%
+  dplyr::mutate(jobPercentDegree = (summJob / sum(summJob)*100))
+MaSum2 <- MaSat %>%
+  dplyr::group_by(salarySatisfaction) %>%
+  dplyr::summarise(summSat = n()) %>%
+  dplyr::mutate(salPercentDegree = (summSat / sum(summSat)*100))
+MaSum3 <- MaSat %>%
+  dplyr::group_by(socialSatisfaction) %>%
+  dplyr::summarise(summSoc = n()) %>%
+  dplyr::mutate(socPercentDegree = (summSoc / sum(summSoc)*100))
+
+MaSumTot <- cbind(MaSum1, MaSum2, MaSum3) %>%
+  dplyr::select(summJob, jobPercentDegree, summSat, salPercentDegree, summSoc, socPercentDegree)
+colnames(MaSumTot) <- c("MAjob#", "MAjob%","MAsat#","MAsat%","MAsoc#","MAsoc%") 
+
+DocSum1 <- DocSat %>%
+  dplyr::group_by(jobSatisfaction) %>%
+  dplyr::summarise(summJob = n()) %>%
+  dplyr::mutate(jobPercentDegree = (summJob / sum(summJob)*100))
+DocSum2 <- DocSat %>%
+  dplyr::group_by(salarySatisfaction) %>%
+  dplyr::summarise(summSat = n()) %>%
+  dplyr::mutate(salPercentDegree = (summSat / sum(summSat)*100))
+DocSum3 <- DocSat %>%
+  dplyr::group_by(socialSatisfaction) %>%
+  dplyr::summarise(summSoc = n()) %>%
+  dplyr::mutate(socPercentDegree = (summSoc / sum(summSoc)*100))
+
+DocSumTot <- cbind(DocSum1, DocSum2, DocSum3) %>%
+  dplyr::select(summJob, jobPercentDegree, summSat, salPercentDegree, summSoc, socPercentDegree)
+colnames(DocSumTot) <- c("Docjob#", "Docjob%","Docsat#","Docsat%","Docsoc#","Docsoc%")
+
+ProfSum1 <- ProfSat %>%
+  dplyr::group_by(jobSatisfaction) %>%
+  dplyr::summarise(summJob = n()) %>%
+  dplyr::mutate(jobPercentDegree = (summJob / sum(summJob)*100))
+ProfSum2 <- ProfSat %>%
+  dplyr::group_by(salarySatisfaction) %>%
+  dplyr::summarise(summSat = n()) %>%
+  dplyr::mutate(salPercentDegree = (summSat / sum(summSat)*100))
+ProfSum3 <- ProfSat %>%
+  dplyr::group_by(socialSatisfaction) %>%
+  dplyr::summarise(summSoc = n()) %>%
+  dplyr::mutate(socPercentDegree = (summSoc / sum(summSoc)*100))
+
+ProfSumTot <- cbind(ProfSum1, ProfSum2, ProfSum3) %>%
+  dplyr::select(summJob, jobPercentDegree, summSat, salPercentDegree, summSoc, socPercentDegree)
+colnames(ProfSumTot) <- c("Profjob#", "Profjob%","Profsat#","Profsat%","Profsoc#","Profsoc%")
+
+BASatTable <- BaSumTot %>%
+  gt() %>%
+  tab_header(title = "Figure 1.3: Bachelor's Satisfaction Breakdown", subtitle = "Source: IPUMS 2013 Higher Education Surveys") %>%
+  tab_spanner (label = "Bachelors", columns = vars("BAjob#", "BAjob%","BAsat#","BAsat%","BAsoc#","BAsoc%")) %>%
+  cols_label(
+    `BAjob#` = "# of Respondents Satisfied with Job",
+    `BAjob%` = "% of Respondents Satisfied with Job",
+    `BAsat#` = "# of Respondents Satisfied with Salary",
+    `BAsat%` = "% of Respondents Satisfied with Salary",
+    `BAsoc#` = "# of Respondents Satisfied with Social Contribution",
+    `BAsoc%` = "% of Respondents Satisfied with Social Contribution"
+    )
+
+MASatTable <- MaSumTot %>%
+  gt() %>%
+  tab_header(title = "Figure 1.4: Master's Satisfaction Breakdown", subtitle = "Source: IPUMS 2013 Higher Education Surveys") %>%
+  tab_spanner (label = "Master's", columns = vars("MAjob#", "MAjob%","MAsat#","MAsat%","MAsoc#","MAsoc%")) %>%
+  cols_label(
+    `MAjob#` = "# of Respondents Satisfied with Job",
+    `MAjob%` = "% of Respondents Satisfied with Job",
+    `MAsat#` = "# of Respondents Satisfied with Salary",
+    `MAsat%` = "% of Respondents Satisfied with Salary",
+    `MAsoc#` = "# of Respondents Satisfied with Social Contribution",
+    `MAsoc%` = "% of Respondents Satisfied with Social Contribution"
+  )
+
+DocSatTable <- DocSumTot %>%
+  gt() %>%
+  tab_header(title = "Figure 1.5: Doctorate Satisfaction Breakdown", subtitle = "Source: IPUMS 2013 Higher Education Surveys") %>%
+  tab_spanner (label = "Doctorate", columns = vars("Docjob#", "Docjob%","Docsat#","Docsat%","Docsoc#","Docsoc%")) %>%
+  cols_label(
+    `Docjob#` = "# of Respondents Satisfied with Job",
+    `Docjob%` = "% of Respondents Satisfied with Job",
+    `Docsat#` = "# of Respondents Satisfied with Salary",
+    `Docsat%` = "% of Respondents Satisfied with Salary",
+    `Docsoc#` = "# of Respondents Satisfied with Social Contribution",
+    `Docsoc%` = "% of Respondents Satisfied with Social Contribution"
+  )
+
+ProfSatTable <- ProfSumTot %>%
+  gt() %>%
+  tab_header(title = "Figure 1.6: Professional Degree Satisfaction Breakdown", subtitle = "Source: IPUMS 2013 Higher Education Surveys") %>%
+  tab_spanner (label = "Professional Degree", columns = vars("Profjob#", "Profjob%","Profsat#","Profsat%","Profsoc#","Profsoc%")) %>%
+  cols_label(
+    `Profjob#` = "# of Respondents Satisfied with Job",
+    `Profjob%` = "% of Respondents Satisfied with Job",
+    `Profsat#` = "# of Respondents Satisfied with Salary",
+    `Profsat%` = "% of Respondents Satisfied with Salary",
+    `Profsoc#` = "# of Respondents Satisfied with Social Contribution",
+    `Profsoc%` = "% of Respondents Satisfied with Social Contribution"
+  )
+```
+
+
+
+
+
+
+``` {r printTable, echo = FALSE, message = FALSE}
+BASatTable
+```
+
+
+
+
+
+
+``` {r tableprint, echo = FALSE, message = FALSE}
+MASatTable
+DocSatTable
+ProfSatTable
+```
+
+Though the average satisfaction score places those with BAs to be most satisfied, examining the satisfaction breakdown by type (job, salary, social) is more realistic. The table above shows the number and percentage of respondents and their satisfaction level by highest degree obtained. Scrolling to the right, the number of respondents and their satisfaction levels by education level can be observed. Those with professional degrees had the highest percentage of individuals "Very Satisfied" with their job, and those with bachelor's degrees had the least. A similar trend is seen for salary satisfaction, with respondents with professional degrees having the highest satisfaction and bachelor degree recipients being the least. The same trend can be seen for social satisfaction. 
+
+## Conclusions
+
+In conclusion, the results from this data analysis aligned with previous knowledge on how socioeconomic status factors into education level and career satisfaction. Females had a slightly lower highest degree on average, which is to be expected. Similarly, minority races had the lowest degree on average as well. This shows that there are disparities in race and gender within higher education. Interestingly, degree had a clear effect on salary, job, and social satisfaction as well with professional degrees having the most satisfied respondents for each question. It is important to note that no test for statistical significance has been done for this analysis, so the differences observed may be due to chance and randomness in the dataset.
+
+
